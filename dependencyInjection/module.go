@@ -1,0 +1,57 @@
+package dependencyinjection
+
+import (
+	"log"
+	"os"
+
+	"github.com/anandtiwari11/event-trigger/controller"
+	"github.com/anandtiwari11/event-trigger/dao"
+	daointerface "github.com/anandtiwari11/event-trigger/daoInterface"
+	"github.com/anandtiwari11/event-trigger/service"
+	serviceinterface "github.com/anandtiwari11/event-trigger/serviceInterface"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/fx"
+)
+
+var TriggerModule =  fx.Options(
+	fx.Provide(
+		fx.Annotate(
+			dao.NewTriggerDaoImpl,
+			fx.As(new(daointerface.ITriggerDao)),
+		),
+	),
+	fx.Provide(
+		fx.Annotate(
+			service.NewUserService,
+			fx.As(new(serviceinterface.IServiceInterface)),
+		),
+	),
+	fx.Provide(controller.NewTriggerController),
+)
+func bootstrap(router *gin.Engine) {
+	log.Println("Setting up the Gin server on port :8080...")
+	go func() {
+		router.Use(COSMMiddleware())
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8080"
+		}
+		if err := router.Run("0.0.0.0:8080"); err != nil {
+			log.Fatalf("Failed to run server: %v", err)
+		}
+	}()
+}
+
+func COSMMiddleware() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-type, Content-Length")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PUT, PATCH, DELETE, OPTIONS")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	}
+}
