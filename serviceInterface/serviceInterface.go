@@ -14,4 +14,6 @@ type IServiceInterface interface {
 	DeleteFromArchive(event *models.Event) error
 	GetAllTriggers() (*[]models.Trigger, error)
 	UpdateTrigger(updatedTrigger *models.Trigger) error
+	ProcessScheduledTrigger(trigger *models.Trigger) error
+	ProcessAPITrigger(input *models.Trigger) error
 }

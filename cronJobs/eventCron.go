@@ -20,8 +20,8 @@ func (job *EventLifecycleJob) Run() {
 			continue
 		}
 		for _, event := range *activeEvents {
-			if time.Since(event.Timestamp) > 2*time.Hour {
-				log.Printf("The event with event id %d has been sent to archive", event.ID)
+			if time.Since(event.ExecutionTime) > 2*time.Hour {
+				log.Println("An event has been sent to archive", event)
 				job.TriggerDAO.MoveToArchive(&event)
 			}
 		}
@@ -32,8 +32,8 @@ func (job *EventLifecycleJob) Run() {
 			continue
 		}
 		for _, event := range *archivedEvents {
-			if time.Since(event.Timestamp) > 48*time.Hour {
-				log.Printf("The event with event id %d has been deleted", event.ID)
+			if time.Since(event.ExecutionTime) > 48*time.Hour {
+				log.Println("An event has been deleted", event)
 				job.TriggerDAO.DeleteFromArchive(&event)
 			}
 		}

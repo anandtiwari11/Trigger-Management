@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/anandtiwari11/event-trigger/controller"
+	jobs "github.com/anandtiwari11/event-trigger/cronJobs"
 	"github.com/anandtiwari11/event-trigger/dao"
 	daointerface "github.com/anandtiwari11/event-trigger/daoInterface"
 	"github.com/anandtiwari11/event-trigger/service"
@@ -22,16 +23,16 @@ var TriggerModule =  fx.Options(
 	),
 	fx.Provide(
 		fx.Annotate(
-			service.NewUserService,
+			service.NewTriggerService,
 			fx.As(new(serviceinterface.IServiceInterface)),
 		),
 	),
 	fx.Provide(controller.NewTriggerController),
 )
+
 func bootstrap(router *gin.Engine) {
 	log.Println("Setting up the Gin server on port :8080...")
 	go func() {
-		router.Use(COSMMiddleware())
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = "8080"
@@ -42,11 +43,11 @@ func bootstrap(router *gin.Engine) {
 	}()
 }
 
-func COSMMiddleware() gin.HandlerFunc{
+func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-type, Content-Length")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Authorization, X-Requested-With, Accept, Origin")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, PUT, PATCH, DELETE, OPTIONS")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -54,4 +55,12 @@ func COSMMiddleware() gin.HandlerFunc{
 		}
 		c.Next()
 	}
+}
+
+func EventCronJob() {
+	triggerDAO := &dao.TriggerDaoImpl{}
+	eventLifecycleJob := &jobs.EventLifecycleJob{
+		TriggerDAO: triggerDAO,
+	}
+	go eventLifecycleJob.Run()
 }

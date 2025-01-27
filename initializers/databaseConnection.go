@@ -7,7 +7,6 @@ import (
 	"github.com/anandtiwari11/event-trigger/models"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
-	// "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -26,7 +25,6 @@ func ConnectDB() {
         " port=" + os.Getenv("DB_PORT") +
         " sslmode=" + os.Getenv("DB_SSLMODE")
     DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-    // DB, err = gorm.Open(sqlite.Open("test"), &gorm.Config{})
     if err != nil {
         log.Fatalf("Failed to connect to the database: %v", err)
     }

@@ -1,11 +1,9 @@
 package controller
 
 import (
-	"encoding/json"
-	"io/ioutil"
+	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/anandtiwari11/event-trigger/constants"
@@ -16,13 +14,13 @@ import (
 func (triggerController *TriggerController) ProcessTrigger(c *gin.Context) {
 	var input models.Trigger
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR : constants.INVALID_INPUT})
 		return
 	}
 
 	if input.Type == constants.API {
 		if input.Endpoint == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Trigger"})
+			c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: constants.INVALID_INPUT})
 			return
 		}
 		handleAPITrigger(triggerController, c, &input)
@@ -30,147 +28,105 @@ func (triggerController *TriggerController) ProcessTrigger(c *gin.Context) {
 		if input.ExecutionTime.IsZero() {
 			input.ExecutionTime = time.Now()
 		}
-		handleScheduledTrigger(triggerController, c, &input)
+		c.JSON(http.StatusOK, input)
+		err := handleScheduledTrigger(triggerController, &input)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{constants.ERROR: err.Error()})
+			return
+		}
 	}
 }
 
-func handleScheduledTrigger(triggerController *TriggerController, c *gin.Context, input *models.Trigger) {
-	istLocation, err := time.LoadLocation("Asia/Kolkata")
-	if err != nil {
-		log.Printf("Error Finding Time Zone")
-	}
-	log.Printf("Received input payload: %s", string(input.Message))
-	apiResponse := models.Event{
-		Payload:   input.Payload,
-		Response:  string(input.Message),
-		State:     constants.ACTIVE,
-		Timestamp: time.Now(),
-	}
-	input.ExecutionTime = input.ExecutionTime.In(istLocation)
+func handleScheduledTrigger(triggerController *TriggerController, input *models.Trigger) error {
 	if err := triggerController.TriggerService.CreateNewTrigger(input); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to store Trigger",
-			"details": err.Error(),
-		})
-		return
+		return fmt.Errorf(constants.FAILED_TO_PROCESS_SCHEDULED_TRIGGER, err)
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "data": apiResponse})
+    if err := triggerController.TriggerService.ProcessScheduledTrigger(input); err != nil {
+        return fmt.Errorf(constants.FAILED_TO_PROCESS_SCHEDULED_TRIGGER, err)
+    }
+    if input.IsRecurring {
+        input.ExecutionTime = input.ExecutionTime.Add(time.Duration(input.Interval) * time.Minute)
+        if err := triggerController.TriggerService.UpdateTrigger(input); err != nil {
+            return fmt.Errorf(constants.FAILED_TO_UPDATE_SCHEDULED_TRIGGER, err)
+        }
+    }
+    
+    return nil
 }
 
 func handleAPITrigger(triggerController *TriggerController, c *gin.Context, input *models.Trigger) {
-	client := &http.Client{
-		Timeout: 20 * time.Second,
-	}
+	triggerController.TriggerService.CreateNewTrigger(input)
 	log.Printf("Received input payload: %s", string(input.Payload))
-	var payloadJSON interface{}
-	if err := json.Unmarshal(input.Payload, &payloadJSON); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload format", "details": err.Error()})
-		return
+	if err := triggerController.TriggerService.ProcessAPITrigger(input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: err})
 	}
-	request, err := http.NewRequest(http.MethodPost, input.Endpoint, strings.NewReader(string(input.Payload)))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to create API request",
-			"details": err.Error(),
-		})
-		return
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := client.Do(request)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to call API",
-			"details": err.Error(),
-		})
-		return
-	}
-	defer response.Body.Close()
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read API response"})
-		return
-	}
-	log.Printf("API Response: %s", string(body))
-
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "API call returned non-2xx status code",
-			"details": string(body),
-		})
-		return
-	}
-	apiResponse := models.Event{
-		Payload:   input.Payload,
-		Response:  string(body),
-		State:     constants.ACTIVE,
-		Timestamp: time.Now(),
-	}
-	log.Printf("Attempting to store API response: %+v", apiResponse)
-	if err := triggerController.TriggerService.CreateNewEvent(&apiResponse); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to store API response",
-			"details": err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "data": apiResponse})
+	c.JSON(http.StatusOK, gin.H{constants.STATUS: constants.SUCCESS})
 }
 
 func (triggerController *TriggerController) GetAllEvents(c *gin.Context) {
 	events, err := triggerController.TriggerService.GetAllEvents()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error" : err})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: err})
 	}
-	c.JSON(http.StatusOK, gin.H{"events" : events})
+	c.JSON(http.StatusOK, gin.H{constants.EVENTS: events})
 }
 
 func (triggerController *TriggerController) UpdateEvent(c *gin.Context) {
 	var input models.Event
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: constants.INVALID_INPUT})
 		return
 	}
 	err := triggerController.TriggerService.UpdateEvent(&input)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error" : err})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: err})
 	}
-	c.JSON(http.StatusOK, gin.H{"message" : "event updated"})
+	c.JSON(http.StatusOK, gin.H{constants.MESSAGE: constants.EVENT_UPDATED})
 }
 
 func (triggerController *TriggerController) DeleteEvent(c *gin.Context) {
 	var input models.Event
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: constants.INVALID_INPUT})
 		return
 	}
 	err := triggerController.TriggerService.DeleteEvent(&input)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error" : err})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: err})
 	}
-	c.JSON(http.StatusOK, gin.H{"message" : "event updated"})
+	c.JSON(http.StatusOK, gin.H{constants.MESSAGE: constants.EVENT_UPDATED})
 }
 
 func (triggerController *TriggerController) GetAllTriggers(c *gin.Context) {
 	triggers, err := triggerController.TriggerService.GetAllTriggers()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error" : err})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: err})
 	}
-	c.JSON(http.StatusOK, gin.H{"triggers" : triggers})
+	c.JSON(http.StatusOK, gin.H{constants.TRIGGERS: triggers})
 }
-
 
 func (triggerController *TriggerController) UpdateTrigger(c *gin.Context) {
 	var input models.Trigger
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: constants.INVALID_INPUT})
 		return
 	}
 	if err := triggerController.TriggerService.UpdateTrigger(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: constants.INVALID_INPUT})
 		return
 	}
 }
 
-func (triggerController *TriggerController) TriggerUpdate() {
-	
+
+func (triggerController *TriggerController) DeleteTrigger(c *gin.Context) {
+	var input models.Trigger
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: constants.INVALID_INPUT})
+		return
+	}
+	err := triggerController.TriggerService.DeleteTrigger(&input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{constants.ERROR: err})
+	}
+	c.JSON(http.StatusOK, gin.H{constants.MESSAGE: constants.EVENT_UPDATED})
 }

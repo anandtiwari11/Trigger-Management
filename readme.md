@@ -9,7 +9,22 @@
             
                     -- recurring trigger, non-recurring triggers.
                     
--- the website is hosted on render which can be accessed using trigger 
+-- the website is hosted on render.com
+
+**local setup**
+
+-- please clone the repository in your local
+
+-- install go
+
+-- run go mod tidy
+
+-- since all the environment variables are directly initialised in the code itself we do not need to set up the .env file
+due to some render.com deployment issue but i believe the best practice is to put .env in gitignore
+
+
+**cost of running** 
+in ruppe := 0 (as i am currently using free versions of render.com available services)
 
 https://trigger-management.onrender.com/{endpoints}
 
@@ -18,20 +33,28 @@ https://trigger-management.onrender.com/{endpoints}
 
                         **for triggers**
                         -- for posting a trigger r.POST("/trigger")
+                        https://trigger-management.onrender.com/trigger
 
                         -- for fetching all triggers r.GET("/allTriggers") 
+                        https://trigger-management.onrender.com/allTriggers
 
                         -- for updating a trigger r.PUT("/updateTrigger") 
+                        https://trigger-management.onrender.com/updateTrigger
 
                         **for events**
                         -- for getting all triggers r.GET("/getEvents")
+                        https://trigger-management.onrender.com/getEvents
 
                         -- for updating a trigger r.PUT("/updateEvents")
+                        https://trigger-management.onrender.com/updateEvents
 
                         -- for deleting an event r.DELETE("/deleteEvent")
+                        https://trigger-management.onrender.com/deleteEvent
 
 
 ## For Testing API triggers :
+
+https://trigger-management.onrender.com/trigger
 -- **payload** 
 
 
@@ -41,7 +64,7 @@ https://trigger-management.onrender.com/{endpoints}
 
     "type": "api",
 
-    "execution_time": "2025-01-26T09:55:00Z",
+    "message": "Hello World",
 
     "endpoint": "https://jsonplaceholder.typicode.com/posts",
 
@@ -60,34 +83,76 @@ https://trigger-management.onrender.com/{endpoints}
  
  use this payload because it is giving the perfect output, in case of other endpoints you might face api key issues and other issues which is not part of my issue.
 
+## for testing the scheduled triggers
+
+https://trigger-management.onrender.com/trigger
+-- **payload**
+
+**nonrecurring**
+
+{
+
+    "name": "Test Trigger",
+
+    "type": "scheduled",
+
+    "execution_time": "2025-01-28T16:27:00.893672+05:30",
+
+
+    "is_recurring": false
+
+}
+
+--
+
+**recurring**
+https://trigger-management.onrender.com/trigger
+
+--
+
+
+{
+
+    "name": "Test Trigger",
+
+    "type": "scheduled",
+
+    "is_recurring": true
+
+}
+
+--
+
+
+
 
 ## Frontend Integration :
 -- as of now i was not able to integrate the frontend because of no knowldge of frontend. 
 
 I deployed a frontend website using vercel v0 AI IDE but was giving multiple error and thats why i decided to not to publish it, because it will make no sense.
 
+So it is my humble request to you to please test this service on Postman. 
 
-## Improved Idea of Mine which i was not able to implement
--- The improved idea involves using Redis sorted sets to manage and execute scheduled triggers efficiently. 
+https://oht7kimnizxv3e6o.vercel.app/ hosted on vercel
 
-When a scheduled trigger is received, it is saved in the database and added to Redis with its execution time as the score. 
 
-A concurrent cron job runs periodically to fetch triggers from Redis that are due for execution, based on the current time. 
+## Approach for scheduled triggers
 
-These triggers are processed to create events in the database. 
+-- i am using gocron module in go to manage these triggers, which works similar to celery-beat /clery in python.
 
-For recurring triggers, their execution time is updated by adding the interval, while non-recurring triggers are moved to an infinite time to prevent further execution. 
+-- the purpose of using this module is to create concurrent tasks which will create events in the DB and 
 
-On server restarts, triggers from the database with in_redis=false are resynced into Redis to ensure continuity. This approach combines Redis for fast execution scheduling with the database for persistence and fault tolerance.
+go cron is used to manage these concurrent go-routines and create tasks.
 
-## My message to shobhit
--- this app may not be very perfect because i was a bit busy with my final year project presentation and research paper work also my end sems were going on which ended on Monday 27 Jan. 
+i am trying to use faktory which is an event queue manager to further optimise the process and trying to write a readable and reusable code
 
-Apart from it there are very few resources in go that makes it quite difficult. 
 
-Still i am ready to be evaluated based on my code but i can improve it.
 
-I am really very happy to be part of this assignment.
+## the db variables are
 
-Thanks & Regards.
-
+DB_HOST=dpg-cuasfla3esus73eolmug-a.oregon-postgres.render.com
+DB_USER=trigger_management_oz3e_user
+DB_PASSWORD=WI7wiGhHsOB2GknfXvKK2nYSUWSq305D
+DB_NAME=trigger_management_oz3e
+DB_PORT=5432
+DB_SSLMODE=require
